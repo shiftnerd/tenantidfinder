@@ -1,0 +1,776 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microsoft 365 Tenant ID & DNS Checker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.8/clipboard.min.js"></script>
+</head>
+<body class="bg-slate-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-blue-600 mb-2">Microsoft 365 Tenant ID & DNS Checker</h1>
+            <p class="text-gray-600">Extract tenant IDs from Microsoft 365 domains and check DNS records</p>
+        </header>
+
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <div class="mb-6">
+                <label for="domain" class="block text-gray-700 font-semibold mb-2">Enter Domain:</label>
+                <div class="flex">
+                    <input type="text" id="domain" placeholder="example.com" 
+                        class="flex-grow px-4 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <button id="checkBtn" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r-lg transition-colors">
+                        Check
+                    </button>
+                </div>
+                <p class="mt-2 text-sm text-gray-500">Enter a domain without http:// or https:// (e.g., microsoft.com)</p>
+            </div>
+            
+            <div class="mb-6">
+                <label for="domainList" class="block text-gray-700 font-semibold mb-2">Or Enter Multiple Domains:</label>
+                <textarea id="domainList" placeholder="example.com, contoso.com, fabrikam.com" rows="3"
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                <p class="mt-2 text-sm text-gray-500">Enter domains separated by commas</p>
+                <div class="mt-3">
+                    <button id="processListBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+                        Process Domain List
+                    </button>
+                    <button id="exportBtn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors ml-2">
+                        Export to CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results" class="hidden">
+            <!-- Tenant ID Section -->
+            <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+                <h2 class="text-xl font-bold text-blue-600 mb-4 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                    </svg>
+                    Microsoft 365 Tenant Information
+                </h2>
+                <div id="tenantLoading" class="text-center py-4 hidden">
+                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                    <p class="mt-2 text-gray-600">Fetching tenant information...</p>
+                </div>
+                <div id="tenantError" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4">
+                    <p id="tenantErrorMessage"></p>
+                </div>
+                <div id="tenantSuccess" class="hidden">
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-semibold text-gray-700">Tenant ID:</span>
+                            <button id="copyTenantId" class="text-blue-600 hover:text-blue-800 text-sm flex items-center" data-clipboard-target="#tenantId">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                Copy
+                            </button>
+                        </div>
+                        <code id="tenantId" class="block bg-gray-100 p-3 rounded text-sm break-all"></code>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DNS Section -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-xl font-bold text-blue-600 mb-4 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                    </svg>
+                    DNS Records
+                </h2>
+                <div id="dnsLoading" class="text-center py-4 hidden">
+                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                    <p class="mt-2 text-gray-600">Fetching DNS records...</p>
+                </div>
+                <div id="dnsError" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4">
+                    <p id="dnsErrorMessage"></p>
+                </div>
+                <div id="dnsSuccess" class="hidden">
+                    <h3 class="text-lg font-medium text-gray-800 mb-3">Email Configuration</h3>
+                    
+                    <!-- Tab Content -->
+                    <div>
+                        <div id="mx-content" class="dns-content">
+                            <div id="mx-records"></div>
+                        </div>
+                        <div id="autodiscover-content" class="dns-content">
+                            <div id="autodiscover-records"></div>
+                        </div>
+                        <div id="spf-content" class="dns-content">
+                            <div id="spf-records"></div>
+                        </div>
+                        <div id="dmarc-content" class="dns-content">
+                            <div id="dmarc-records"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="resultsList" class="space-y-8 hidden">
+            <!-- Results will be dynamically added here -->
+        </div>
+
+        <footer class="mt-8 text-center text-gray-500 text-sm">
+            <p>This tool does not store or share any of the information you enter.</p>
+            <p class="mt-1">All checks are performed client-side in your browser.</p>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize clipboard.js
+            new ClipboardJS('.text-blue-600[data-clipboard-target]');
+            
+            // Get necessary elements
+            const domainInput = document.getElementById('domain');
+            const domainListInput = document.getElementById('domainList');
+            const checkBtn = document.getElementById('checkBtn');
+            const processListBtn = document.getElementById('processListBtn');
+            const exportBtn = document.getElementById('exportBtn');
+            const resultsDiv = document.getElementById('results');
+            const resultsListDiv = document.getElementById('resultsList');
+            
+            // Tenant elements
+            const tenantLoading = document.getElementById('tenantLoading');
+            const tenantError = document.getElementById('tenantError');
+            const tenantErrorMessage = document.getElementById('tenantErrorMessage');
+            const tenantSuccess = document.getElementById('tenantSuccess');
+            const tenantIdElement = document.getElementById('tenantId');
+            
+            // DNS elements
+            const dnsLoading = document.getElementById('dnsLoading');
+            const dnsError = document.getElementById('dnsError');
+            const dnsErrorMessage = document.getElementById('dnsErrorMessage');
+            const dnsSuccess = document.getElementById('dnsSuccess');
+            
+            // Handle check button click for a single domain
+            checkBtn.addEventListener('click', async function() {
+                const domain = domainInput.value.trim();
+                
+                if (!domain) {
+                    alert('Please enter a domain name');
+                    return;
+                }
+                
+                // Show results section
+                resultsDiv.classList.remove('hidden');
+                resultsListDiv.classList.add('hidden');
+                
+                // Reset all sections
+                resetTenantSection();
+                resetDnsSection();
+                
+                // Fetch tenant ID and DNS records
+                await fetchTenantInfo(domain);
+                await fetchDnsRecords(domain);
+            });
+            
+            // Handle process list button click for multiple domains
+            processListBtn.addEventListener('click', async function() {
+                const domainsText = domainListInput.value.trim();
+                
+                if (!domainsText) {
+                    alert('Please enter at least one domain name');
+                    return;
+                }
+                
+                const domains = domainsText.split(',').map(d => d.trim()).filter(d => d);
+                
+                if (domains.length === 0) {
+                    alert('No valid domains found');
+                    return;
+                }
+                
+                // Show results list section
+                resultsDiv.classList.add('hidden');
+                resultsListDiv.classList.remove('hidden');
+                resultsListDiv.innerHTML = ''; // Clear previous results
+                
+                // Process each domain
+                for (const domain of domains) {
+                    const domainResultDiv = document.createElement('div');
+                    domainResultDiv.className = 'bg-white rounded-lg shadow-lg p-6';
+                    domainResultDiv.innerHTML = `
+                        <h2 class="text-xl font-bold text-blue-600 mb-4">${domain}</h2>
+                        <div class="tenant-result mb-4">
+                            <p class="text-center text-gray-600">Fetching tenant data...</p>
+                        </div>
+                        <div class="dns-result">
+                            <p class="text-center text-gray-600">Fetching DNS data...</p>
+                        </div>
+                    `;
+                    
+                    resultsListDiv.appendChild(domainResultDiv);
+                    
+                    try {
+                        // Fetch tenant info
+                        const tenantInfo = await fetchTenantInfoForDomainList(domain);
+                        const tenantResultDiv = domainResultDiv.querySelector('.tenant-result');
+                        
+                        if (tenantInfo.success) {
+                            tenantResultDiv.innerHTML = `
+                                <div class="bg-green-50 border-l-4 border-green-500 p-4 mb-4">
+                                    <p class="font-semibold">Tenant ID: <span class="font-normal">${tenantInfo.tenantId}</span></p>
+                                </div>
+                            `;
+                        } else {
+                            tenantResultDiv.innerHTML = `
+                                <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
+                                    <p class="text-red-700">${tenantInfo.error}</p>
+                                </div>
+                            `;
+                        }
+                        
+                        // Fetch DNS records
+                        const dnsInfo = await fetchDnsRecordsForDomainList(domain);
+                        const dnsResultDiv = domainResultDiv.querySelector('.dns-result');
+                        
+                        dnsResultDiv.innerHTML = `
+                            <h3 class="text-lg font-medium text-gray-800 mb-3">Email Configuration</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                ${dnsInfo.autodiscover}
+                                ${dnsInfo.mx}
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                ${dnsInfo.spf}
+                                ${dnsInfo.dmarc}
+                            </div>
+                        `;
+                    } catch (error) {
+                        const tenantResultDiv = domainResultDiv.querySelector('.tenant-result');
+                        tenantResultDiv.innerHTML = `
+                            <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
+                                <p class="text-red-700">Error: ${error.message}</p>
+                            </div>
+                        `;
+                        
+                        const dnsResultDiv = domainResultDiv.querySelector('.dns-result');
+                        dnsResultDiv.innerHTML = `
+                            <div class="bg-red-50 border-l-4 border-red-500 p-4">
+                                <p class="text-red-700">Error: Could not fetch DNS data</p>
+                            </div>
+                        `;
+                    }
+                }
+            });
+            
+            // Display all records together
+            const displayAllRecords = () => {
+                const dnsContents = document.querySelectorAll('.dns-content');
+                dnsContents.forEach(content => {
+                    content.classList.remove('hidden');
+                });
+            };
+            
+            // Function to fetch tenant info for a single domain
+            async function fetchTenantInfo(domain) {
+                tenantLoading.classList.remove('hidden');
+                
+                try {
+                    const response = await fetch(`https://login.microsoftonline.com/${domain}/v2.0/.well-known/openid-configuration`);
+                    
+                    if (!response.ok) {
+                        throw new Error("Tenant ID not found");
+                    }
+                    
+                    const data = await response.json();
+                    
+                    // Extract tenant ID from issuer URL
+                    const tenantId = data.issuer.split('/')[3];
+                    
+                    // Update UI
+                    tenantIdElement.textContent = tenantId;
+                    
+                    tenantSuccess.classList.remove('hidden');
+                } catch (error) {
+                    tenantErrorMessage.textContent = error.message;
+                    tenantError.classList.remove('hidden');
+                } finally {
+                    tenantLoading.classList.add('hidden');
+                }
+            }
+            
+            // Function to fetch tenant info for domain list
+            async function fetchTenantInfoForDomainList(domain) {
+                try {
+                    const response = await fetch(`https://login.microsoftonline.com/${domain}/v2.0/.well-known/openid-configuration`);
+                    
+                    if (!response.ok) {
+                        return {
+                            success: false,
+                            error: "Tenant ID not found"
+                        };
+                    }
+                    
+                    const data = await response.json();
+                    
+                    // Extract tenant ID from issuer URL
+                    const tenantId = data.issuer.split('/')[3];
+                    
+                    return {
+                        success: true,
+                        tenantId: tenantId
+                    };
+                } catch (error) {
+                    return {
+                        success: false,
+                        error: "Tenant ID not found"
+                    };
+                }
+            }
+            
+            // Function to fetch DNS records
+            async function fetchDnsRecords(domain) {
+                dnsLoading.classList.remove('hidden');
+                
+                try {
+                    // Fetch MX records
+                    await fetchDnsRecord(domain, 'MX', 'mx-records');
+                    
+                    // Fetch Autodiscover CNAME
+                    await fetchAutodiscoverRecord(domain);
+                    
+                    // Fetch SPF record (TXT record)
+                    await fetchDnsRecord(domain, 'TXT', 'spf-records', record => {
+                        return record.includes('v=spf1');
+                    });
+                    
+                    // Fetch DMARC record
+                    await fetchDnsRecord(`_dmarc.${domain}`, 'TXT', 'dmarc-records');
+                    
+                    dnsSuccess.classList.remove('hidden');
+                    
+                    // Show all DNS records together
+                    displayAllRecords();
+                } catch (error) {
+                    dnsErrorMessage.textContent = error.message;
+                    dnsError.classList.remove('hidden');
+                } finally {
+                    dnsLoading.classList.add('hidden');
+                }
+            }
+            
+            // Function to fetch DNS record
+            async function fetchDnsRecord(domain, type, elementId, filterFn = null) {
+                const url = `https://cloudflare-dns.com/dns-query?name=${domain}&type=${type}`;
+                
+                const response = await fetch(url, {
+                    headers: {
+                        'Accept': 'application/dns-json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch ${type} records: ${response.status} ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                const element = document.getElementById(elementId);
+                
+                if (data.Answer && data.Answer.length > 0) {
+                    let records = data.Answer;
+                    
+                    // Apply filter if provided
+                    if (filterFn) {
+                        records = records.filter(record => filterFn(record.data));
+                    }
+                    
+                    if (records.length > 0) {
+                        let html = `<div class="mb-4">
+                            <h4 class="font-semibold text-gray-700 mb-2">${type} Records:</h4>
+                            <div class="space-y-3">`;
+                        
+                        records.forEach(record => {
+                            html += `
+                                <div class="bg-gray-100 p-3 rounded">
+                                    <div><span class="break-all">${record.data}</span></div>
+                                </div>
+                            `;
+                        });
+                        
+                        html += '</div></div>';
+                        element.innerHTML = html;
+                    } else {
+                        element.innerHTML = `<div class="mb-4">
+                            <h4 class="font-semibold text-gray-700 mb-2">${type} Records:</h4>
+                            <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4">
+                                No matching ${type} records found.
+                            </div>
+                        </div>`;
+                    }
+                } else {
+                    element.innerHTML = `<div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-2">${type} Records:</h4>
+                        <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4">
+                            No ${type} records found.
+                        </div>
+                    </div>`;
+                }
+            }
+            
+            // Function to fetch Autodiscover record
+            async function fetchAutodiscoverRecord(domain) {
+                const url = `https://cloudflare-dns.com/dns-query?name=autodiscover.${domain}&type=CNAME`;
+                
+                const response = await fetch(url, {
+                    headers: {
+                        'Accept': 'application/dns-json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch Autodiscover records: ${response.status} ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                const element = document.getElementById('autodiscover-records');
+                
+                let status = "None";
+                let statusColor = "bg-yellow-100 border-yellow-500 text-yellow-700";
+                
+                if (data.Answer && data.Answer.length > 0) {
+                    const record = data.Answer[0].data;
+                    
+                    if (record.includes('outlook.com')) {
+                        status = "Office 365";
+                        statusColor = "bg-green-100 border-green-500 text-green-700";
+                    } else {
+                        status = "Exchange (On-Premises)";
+                        statusColor = "bg-blue-100 border-blue-500 text-blue-700";
+                    }
+                }
+                
+                element.innerHTML = `
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-gray-700 mb-2">Autodiscover:</h4>
+                        <div class="${statusColor} border-l-4 p-4">
+                            <p>Status: <strong>${status}</strong></p>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Function to reset tenant section
+            function resetTenantSection() {
+                tenantLoading.classList.add('hidden');
+                tenantError.classList.add('hidden');
+                tenantSuccess.classList.add('hidden');
+            }
+            
+            // Function to reset DNS section
+            function resetDnsSection() {
+                dnsLoading.classList.add('hidden');
+                dnsError.classList.add('hidden');
+                dnsSuccess.classList.add('hidden');
+                
+                // Reset all DNS record containers
+                document.getElementById('mx-records').innerHTML = '';
+                document.getElementById('autodiscover-records').innerHTML = '';
+                document.getElementById('spf-records').innerHTML = '';
+                document.getElementById('dmarc-records').innerHTML = '';
+            }
+            
+            // Function to fetch DNS records for domain list
+            async function fetchDnsRecordsForDomainList(domain) {
+                try {
+                    // Fetch MX records
+                    const mxData = await fetchDnsRecordForList(domain, 'MX');
+                    
+                    // Fetch Autodiscover CNAME
+                    const autodiscoverData = await fetchAutodiscoverForList(domain);
+                    
+                    // Fetch SPF record (TXT record with v=spf1)
+                    const spfData = await fetchDnsRecordForList(domain, 'TXT', record => {
+                        return record.includes('v=spf1');
+                    });
+                    
+                    // Fetch DMARC record
+                    const dmarcData = await fetchDnsRecordForList(`_dmarc.${domain}`, 'TXT');
+                    
+                    return {
+                        mx: formatDnsRecordForList('MX', mxData),
+                        autodiscover: autodiscoverData,
+                        spf: formatDnsRecordForList('SPF', spfData),
+                        dmarc: formatDnsRecordForList('DMARC', dmarcData)
+                    };
+                } catch (error) {
+                    throw new Error(`DNS Error: ${error.message}`);
+                }
+            }
+            
+            // Function to fetch DNS record for domain list
+            async function fetchDnsRecordForList(domain, type, filterFn = null) {
+                const url = `https://cloudflare-dns.com/dns-query?name=${domain}&type=${type}`;
+                
+                const response = await fetch(url, {
+                    headers: {
+                        'Accept': 'application/dns-json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    return { success: false, error: `Failed to fetch ${type} records` };
+                }
+                
+                const data = await response.json();
+                
+                if (data.Answer && data.Answer.length > 0) {
+                    let records = data.Answer;
+                    
+                    // Apply filter if provided
+                    if (filterFn) {
+                        records = records.filter(record => filterFn(record.data));
+                    }
+                    
+                    if (records.length > 0) {
+                        return { 
+                            success: true, 
+                            records: records.map(record => record.data)
+                        };
+                    }
+                }
+                
+                return { success: false, error: `No ${type} records found` };
+            }
+            
+            // Function to fetch Autodiscover for domain list
+            async function fetchAutodiscoverForList(domain) {
+                const url = `https://cloudflare-dns.com/dns-query?name=autodiscover.${domain}&type=CNAME`;
+                
+                const response = await fetch(url, {
+                    headers: {
+                        'Accept': 'application/dns-json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    return `
+                        <div class="p-4 bg-red-50 border-l-4 border-red-500 rounded-md">
+                            <h4 class="font-semibold text-gray-700 mb-1">Autodiscover:</h4>
+                            <p class="text-red-700">Error fetching data</p>
+                        </div>
+                    `;
+                }
+                
+                const data = await response.json();
+                
+                let status = "None";
+                let statusColor = "bg-yellow-50 border-yellow-500 text-yellow-700";
+                
+                if (data.Answer && data.Answer.length > 0) {
+                    const record = data.Answer[0].data;
+                    
+                    if (record.includes('outlook.com')) {
+                        status = "Office 365";
+                        statusColor = "bg-green-50 border-green-500 text-green-700";
+                    } else {
+                        status = "Exchange (On-Premises)";
+                        statusColor = "bg-blue-50 border-blue-500 text-blue-700";
+                    }
+                }
+                
+                return `
+                    <div class="p-4 ${statusColor} border-l-4 rounded-md">
+                        <h4 class="font-semibold text-gray-700 mb-1">Autodiscover:</h4>
+                        <p><strong>${status}</strong></p>
+                    </div>
+                `;
+            }
+            
+            // Format DNS record for list display
+            function formatDnsRecordForList(type, data) {
+                if (!data.success) {
+                    return `
+                        <div class="p-4 bg-yellow-50 border-l-4 border-yellow-500 rounded-md">
+                            <h4 class="font-semibold text-gray-700 mb-1">${type}:</h4>
+                            <p class="text-yellow-700">${data.error}</p>
+                        </div>
+                    `;
+                }
+                
+                let recordsHtml = '';
+                data.records.forEach(record => {
+                    recordsHtml += `<div class="bg-gray-100 p-2 rounded mb-1 text-sm break-all">${record}</div>`;
+                });
+                
+                return `
+                    <div class="p-4 bg-gray-50 border-l-4 border-gray-300 rounded-md">
+                        <h4 class="font-semibold text-gray-700 mb-1">${type}:</h4>
+                        ${recordsHtml}
+                    </div>
+                `;
+            }
+            
+            // Function to extract Autodiscover status from HTML
+            function extractAutodiscoverStatus(html) {
+                // Look for status indicator in the HTML
+                if (html.includes('Office 365')) {
+                    return 'Office 365';
+                } else if (html.includes('Exchange (On-Premises)')) {
+                    return 'Exchange (On-Premises)';
+                } else {
+                    return 'None';
+                }
+            }
+            
+            // Function to extract DNS records from formatted HTML
+            function extractDnsRecords(html) {
+                const records = [];
+                
+                // Create a temporary DOM element to parse the HTML
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = html;
+                
+                // Find all record divs
+                const recordDivs = tempDiv.querySelectorAll('.bg-gray-100');
+                recordDivs.forEach(div => {
+                    if (div.textContent.trim()) {
+                        records.push(div.textContent.trim());
+                    }
+                });
+                
+                return records;
+            }
+            
+            // Function to prepare domain data for CSV export
+            function prepareDomainData(domain, tenantInfo, dnsInfo) {
+                return {
+                    name: domain,
+                    tenantInfo: tenantInfo,
+                    dnsInfo: {
+                        autodiscoverStatus: extractAutodiscoverStatus(dnsInfo.autodiscover),
+                        mxRecords: extractDnsRecords(dnsInfo.mx),
+                        spfRecords: extractDnsRecords(dnsInfo.spf),
+                        dmarcRecords: extractDnsRecords(dnsInfo.dmarc)
+                    }
+                };
+            }
+            
+            // Function to export domain data to CSV
+            function exportToCSV(domains) {
+                // Create CSV header
+                let csv = 'Domain,Tenant ID,Autodiscover Status,MX Records,SPF Records,DMARC Records\n';
+                
+                // Process each domain
+                domains.forEach(domain => {
+                    // Prepare the domain data row
+                    const row = [
+                        // Domain name - Escape commas and quotes
+                        `"${domain.name.replace(/"/g, '""')}"`,
+                        
+                        // Tenant ID - Either the ID or error message
+                        `"${domain.tenantInfo.success ? domain.tenantInfo.tenantId.replace(/"/g, '""') : 'Not Found'}"`,
+                        
+                        // Autodiscover Status
+                        `"${domain.dnsInfo.autodiscoverStatus.replace(/"/g, '""')}"`,
+                        
+                        // MX Records - Join multiple records with semicolons, escape commas and quotes
+                        `"${domain.dnsInfo.mxRecords.map(record => record.replace(/"/g, '""')).join('; ')}"`,
+                        
+                        // SPF Records - Join multiple records with semicolons, escape commas and quotes
+                        `"${domain.dnsInfo.spfRecords.map(record => record.replace(/"/g, '""')).join('; ')}"`,
+                        
+                        // DMARC Records - Join multiple records with semicolons, escape commas and quotes
+                        `"${domain.dnsInfo.dmarcRecords.map(record => record.replace(/"/g, '""')).join('; ')}"`,
+                    ];
+                    
+                    // Add the row to CSV content
+                    csv += row.join(',') + '\n';
+                });
+                
+                // Create a Blob with the CSV data
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                
+                // Create a download link and trigger download
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.setAttribute('href', url);
+                link.setAttribute('download', 'microsoft365_domains_report.csv');
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+            
+            // Handle export button click
+            exportBtn.addEventListener('click', async function() {
+                const domainsText = domainListInput.value.trim();
+                
+                if (!domainsText) {
+                    alert('Please enter at least one domain name');
+                    return;
+                }
+                
+                const domains = domainsText.split(',').map(d => d.trim()).filter(d => d);
+                
+                if (domains.length === 0) {
+                    alert('No valid domains found');
+                    return;
+                }
+                
+                // First process domains if not already processed
+                if (resultsListDiv.children.length === 0 || resultsListDiv.classList.contains('hidden')) {
+                    // Trigger the process list button click event
+                    processListBtn.click();
+                    
+                    // Wait for domains to be processed
+                    setTimeout(async function() {
+                        await exportProcessedDomains(domains);
+                    }, 3000); // Wait 3 seconds for processing to complete
+                } else {
+                    // Export already processed domains
+                    await exportProcessedDomains(domains);
+                }
+            });
+            
+            // Export processed domains to CSV
+            async function exportProcessedDomains(domains) {
+                const domainDataList = [];
+                
+                // Get domain result elements
+                const domainResultDivs = document.querySelectorAll('#resultsList > div');
+                
+                // Extract data from each domain result
+                domainResultDivs.forEach(domainDiv => {
+                    const domainName = domainDiv.querySelector('h2').textContent;
+                    
+                    // Extract tenant info
+                    let tenantInfo = { success: false };
+                    const tenantElement = domainDiv.querySelector('.tenant-result .bg-green-50');
+                    if (tenantElement) {
+                        const tenantIdMatch = tenantElement.textContent.match(/Tenant ID:\s*(.+)/);
+                        if (tenantIdMatch && tenantIdMatch[1]) {
+                            tenantInfo = {
+                                success: true,
+                                tenantId: tenantIdMatch[1].trim()
+                            };
+                        }
+                    }
+                    
+                    // Extract DNS info
+                    const dnsResult = domainDiv.querySelector('.dns-result');
+                    const dnsInfo = {
+                        autodiscover: dnsResult.querySelector('.grid > div:nth-child(1)')?.outerHTML || '',
+                        mx: dnsResult.querySelector('.grid > div:nth-child(2)')?.outerHTML || '',
+                        spf: dnsResult.querySelector('.grid + .grid > div:nth-child(1)')?.outerHTML || '',
+                        dmarc: dnsResult.querySelector('.grid + .grid > div:nth-child(2)')?.outerHTML || ''
+                    };
+                    
+                    // Add to the list
+                    domainDataList.push(prepareDomainData(domainName, tenantInfo, dnsInfo));
+                });
+                
+                // Export to CSV
+                exportToCSV(domainDataList);
+            }   
+        });
+    </script>
+</body>
+</html>
